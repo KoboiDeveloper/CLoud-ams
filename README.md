@@ -1,29 +1,28 @@
 # Cloud Storage
 
-Dropbox-like file & sharing app (monorepo).
+Dropbox-like file & sharing frontend (Next.js).
 
-## Structure
-
-- `api/` — NestJS + Prisma + SQL Server (`CLOUD_STORAGE`) + Dropbox
-- `web/` — Next.js 15 (port **3100**)
+API digabung ke Nest **PROJECT MANAGEMENT DB** di `/api/cloud/*` (DB: `CLOUD_STORAGE`).
 
 ## Quick start
 
 ```bash
-# API
-cd api
-npm install
-npx prisma db push
-npm run seed
+# Backend (PM Nest — includes Cloud API)
+cd "../PROJECT MANAGEMENT DB"
 npm run start:dev
+# → http://localhost:1000
 
-# Web (other terminal)
-cd web
+# Frontend (this repo root)
 npm install
 npm run dev
+# → http://localhost:3100
 ```
 
-- API: http://localhost:1100
-- Web: http://localhost:3100
+`.env.local`:
 
-Default SUPER user comes from `api/.env` (`ADMIN_NIK` / `ADMIN_PASSWORD`).
+```
+BACKEND_API_URL=http://localhost:1000
+NEXT_PUBLIC_API_URL=http://localhost:1000
+```
+
+Cloud JWT / Dropbox / DB env ada di `PROJECT MANAGEMENT DB/.env` (`CLOUD_*`).
