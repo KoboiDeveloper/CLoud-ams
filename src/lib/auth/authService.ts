@@ -63,10 +63,23 @@ const AuthService = {
 
 export default AuthService;
 
-export function getWorkspaceReturnUrl(handoffToken: string): string {
+/** Custom protocol registered by AMS Workspace Electron shell */
+export const WORKSPACE_PROTOCOL = 'ams-workspace';
+
+export function getWorkspaceHttpsReturnUrl(handoffToken: string): string {
   const base = (
     process.env.NEXT_PUBLIC_WORKSPACE_URL ||
-    'https://task-manager-fe-lyart.vercel.app'
+    'https://workspace.amscorp.id'
   ).replace(/\/$/, '');
-  return `${base}/dashboard/user-settings?cloudHandoff=${encodeURIComponent(handoffToken)}#connected-apps`;
+  return `${base}/dashboard/user-settings?cloudHandoff=${encodeURIComponent(handoffToken)}#connected-cloud`;
+}
+
+/** Opens installed Electron app (falls back to HTTPS if protocol not handled). */
+export function getWorkspaceDeepLinkUrl(handoffToken: string): string {
+  return `${WORKSPACE_PROTOCOL}://handoff?cloudHandoff=${encodeURIComponent(handoffToken)}`;
+}
+
+/** @deprecated Prefer deep link + HTTPS fallback in UI */
+export function getWorkspaceReturnUrl(handoffToken: string): string {
+  return getWorkspaceDeepLinkUrl(handoffToken);
 }

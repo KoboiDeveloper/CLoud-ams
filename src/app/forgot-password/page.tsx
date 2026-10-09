@@ -10,7 +10,10 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AuthService, { getWorkspaceReturnUrl } from '@/lib/auth/authService';
+import AuthService, {
+  getWorkspaceDeepLinkUrl,
+  getWorkspaceHttpsReturnUrl,
+} from '@/lib/auth/authService';
 import { DarkModeToggle } from '@/components/shared/DarkModeToggle';
 import { cn } from '@/lib/utils';
 
@@ -107,7 +110,55 @@ function ForgotPasswordForm() {
       return;
     }
     setBusy('workspace');
-    window.location.href = getWorkspaceReturnUrl(handoffToken);
+    // Prefer Electron deep link so desktop app redeems handoff (not the browser).
+    // Do NOT auto-open HTTPS — handoff token is one-time; browser redeem would
+    // burn it and Electron stays disconnected.
+    const deep = getWorkspaceDeepLinkUrl(handoffToken);
+
+    let appLikelyOpened = false;
+    const markOpened = () => {
+      appLikelyOpened = true;
+    };
+    window.addEventListener('blur', markOpened);
+    const onVis = () => {
+      if (document.hidden) markOpened();
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = deep;
+      document.body.appendChild(iframe);
+      window.setTimeout(() => {
+        try {
+          iframe.remove();
+        } catch {
+          /* ignore */
+        }
+      }, 2500);
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      window.location.href = deep;
+    } catch {
+      /* protocol navigation can throw in some browsers — ignore */
+    }
+
+    window.setTimeout(() => {
+      window.removeEventListener('blur', markOpened);
+      document.removeEventListener('visibilitychange', onVis);
+      setBusy(null);
+      if (appLikelyOpened) {
+        toast.success('AMS Workspace dibuka — Cloud terhubung di jendela desktop.');
+      } else {
+        toast.message(
+          'Jika app tidak terbuka: install AMS Workspace terbaru, atau pakai tombol "Buka di browser Workspace" (hanya untuk web).',
+        );
+      }
+    }, 1800);
   };
 
   const stayOnCloud = async () => {
@@ -341,7 +392,21 @@ function ForgotPasswordForm() {
               disabled={busy !== null || !handoffToken}
               onClick={goWorkspace}
             >
-              {busy === 'workspace' ? 'Mengarahkan…' : 'Kembali ke Workspace & hubungkan'}
+              {busy === 'workspace'
+                ? 'Membuka AMS Workspace…'
+                : 'Kembali ke AMS Workspace (app) & hubungkan'}
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={busy !== null || !handoffToken}
+              onClick={() => {
+                if (!handoffToken) return;
+                setBusy('workspace');
+                window.location.href = getWorkspaceHttpsReturnUrl(handoffToken);
+              }}
+            >
+              Buka di browser Workspace
             </Button>
             <Button
               variant="outline"
@@ -352,8 +417,8 @@ function ForgotPasswordForm() {
               {busy === 'cloud' ? 'Masuk…' : 'Lanjut di Cloud Storage'}
             </Button>
             <p className="text-center text-[11px] text-muted-foreground">
-              Jika tetap di Cloud, connector Workspace belum terhubung sampai Anda hubungkan
-              manual.
+              Dari Electron: pilih tombol app agar Cloud terhubung di jendela desktop. Browser
+              Workspace hanya untuk pemakaian web.
             </p>
           </div>
         )}
