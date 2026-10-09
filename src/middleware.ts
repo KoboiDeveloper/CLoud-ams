@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-function decodeJwtPayload(token: string): { exp?: number; roleId?: string } | null {
+function decodeJwtPayload(token: string): {
+  exp?: number;
+  roleId?: string;
+  mustChangePassword?: boolean;
+} | null {
   try {
     const part = token.split('.')[1];
     if (!part) return null;
@@ -18,7 +22,6 @@ function isTokenExpired(token?: string): boolean {
   return payload.exp * 1000 < Date.now() + 5000;
 }
 
-/** Strip leftover Task Manager / pre-isolation cookies so they cannot fake a Cloud session. */
 function clearLegacyAuthCookies(res: NextResponse) {
   const expired = {
     path: '/',
@@ -32,24 +35,30 @@ function clearLegacyAuthCookies(res: NextResponse) {
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  // Cloud-only — never treat Task Manager access_token / refresh_token as Cloud session
   const access = req.cookies.get('cloud_access_token')?.value;
   const refresh = req.cookies.get('cloud_refresh_token')?.value;
-  const hasSession = (!!access && !isTokenExpired(access)) || (!!refresh && !isTokenExpired(refresh));
+  const accessPayload = access && !isTokenExpired(access) ? decodeJwtPayload(access) : null;
+  const hasSession =
+    (!!access && !isTokenExpired(access)) || (!!refresh && !isTokenExpired(refresh));
+  const mustChangePassword = accessPayload?.mustChangePassword === true;
   const hasLegacyCookies =
     !!req.cookies.get('access_token')?.value || !!req.cookies.get('refresh_token')?.value;
 
   const isPublic =
     pathname.startsWith('/login') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password') ||
     pathname.startsWith('/s/') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon');
 
-  if (pathname.startsWith('/api/cloud/auth/login') || pathname.startsWith('/api/cloud/auth/refresh')) {
-    return NextResponse.next();
-  }
+  const isPublicAuthApi =
+    pathname.startsWith('/api/cloud/auth/login') ||
+    pathname.startsWith('/api/cloud/auth/refresh') ||
+    pathname.startsWith('/api/cloud/auth/forgot-password') ||
+    pathname.startsWith('/api/cloud/auth/reset-password');
 
-  if (pathname.startsWith('/api/cloud/share/public')) {
+  if (isPublicAuthApi || pathname.startsWith('/api/cloud/share/public')) {
     return NextResponse.next();
   }
 
@@ -65,16 +74,48 @@ export function middleware(req: NextRequest) {
     return res;
   }
 
+  // Force change password gate (cloud.amscorp.id only — JWT claim)
+  const changeAllowed =
+    pathname.startsWith('/change-password') ||
+    pathname.startsWith('/api/cloud/auth/change-password') ||
+    pathname.startsWith('/api/cloud/auth/logout') ||
+    pathname.startsWith('/api/cloud/auth/user-info') ||
+    pathname.startsWith('/api/cloud/auth/refresh');
+
+  if (hasSession && mustChangePassword && !changeAllowed && !pathname.startsWith('/forgot-password') && !pathname.startsWith('/reset-password')) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { message: 'Password change required', mustChangePassword: true },
+        { status: 403 },
+      );
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = '/change-password';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
   if (pathname === '/login' && hasSession) {
     const url = req.nextUrl.clone();
+    url.pathname = mustChangePassword ? '/change-password' : '/drive';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
+  if (pathname === '/change-password' && hasSession && !mustChangePassword) {
+    const url = req.nextUrl.clone();
     url.pathname = '/drive';
-    url.search = ''; // do not carry ?msg= onto /drive (was causing the stuck URL)
+    url.search = '';
     return NextResponse.redirect(url);
   }
 
   if (pathname === '/') {
     const url = req.nextUrl.clone();
-    url.pathname = hasSession ? '/drive' : '/login';
+    url.pathname = !hasSession
+      ? '/login'
+      : mustChangePassword
+        ? '/change-password'
+        : '/drive';
     url.search = '';
     const res = NextResponse.redirect(url);
     if (!hasSession && hasLegacyCookies) clearLegacyAuthCookies(res);

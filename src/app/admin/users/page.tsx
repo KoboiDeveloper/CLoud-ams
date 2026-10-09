@@ -18,6 +18,7 @@ import {
   Trash,
   HardDrives,
   ArrowsClockwise,
+  Key,
 } from '@phosphor-icons/react';
 import AdminService from '@/lib/admin/adminService';
 import { useAuthActions } from '@/lib/auth/useAuthAction';
@@ -122,6 +123,10 @@ export default function AdminUsersPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [requirePasswordChange, setRequirePasswordChange] = useState(true);
   const [deleteMode, setDeleteMode] = useState<'user' | 'withData' | null>(null);
   const [selected, setSelected] = useState<AdminUser | null>(null);
   const [quotaGb, setQuotaGb] = useState('5');
@@ -169,6 +174,27 @@ export default function AdminUsersPage() {
       setDeleteMode(null);
       qc.invalidateQueries({ queryKey: ['admin-users'] });
       qc.invalidateQueries({ queryKey: ['admin-overview'] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || e.message),
+  });
+
+  const resetMut = useMutation({
+    mutationFn: () =>
+      AdminService.resetPassword(selected!.nik, {
+        password: resetPassword,
+        requirePasswordChange,
+      }),
+    onSuccess: () => {
+      toast.success(
+        requirePasswordChange
+          ? 'Password direset. User wajib ganti password saat login di cloud.amscorp.id'
+          : 'Password direset',
+      );
+      setResetOpen(false);
+      setResetPassword('');
+      setResetConfirm('');
+      setRequirePasswordChange(true);
+      setSelected(null);
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || e.message),
   });
@@ -428,6 +454,20 @@ export default function AdminUsersPage() {
                             >
                               <HardDrives size={16} weight="bold" />
                             </button>
+                            <button
+                              type="button"
+                              title="Reset password"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-amber-500/15 text-amber-700 transition-colors hover:bg-amber-500/25 dark:text-amber-400"
+                              onClick={() => {
+                                setSelected(u);
+                                setResetPassword('');
+                                setResetConfirm('');
+                                setRequirePasswordChange(true);
+                                setResetOpen(true);
+                              }}
+                            >
+                              <Key size={16} weight="bold" />
+                            </button>
                             {isSuper && (
                               <button
                                 type="button"
@@ -473,6 +513,77 @@ export default function AdminUsersPage() {
             <Input type="number" min={1} value={quotaGb} onChange={(e) => setQuotaGb(e.target.value)} />
             <Button className="w-full" onClick={() => quotaMut.mutate()} disabled={quotaMut.isPending}>
               Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={resetOpen}
+        onOpenChange={(open) => {
+          setResetOpen(open);
+          if (!open) {
+            setResetPassword('');
+            setResetConfirm('');
+            setRequirePasswordChange(true);
+            setSelected(null);
+          }
+        }}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Reset Password — {selected?.nama}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground font-mono">{selected?.nik}</p>
+            <div className="space-y-2">
+              <Label htmlFor="reset-pw">Password baru</Label>
+              <Input
+                id="reset-pw"
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="Contoh: abc"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reset-pw-confirm">Konfirmasi password</Label>
+              <Input
+                id="reset-pw-confirm"
+                type="password"
+                value={resetConfirm}
+                onChange={(e) => setResetConfirm(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={requirePasswordChange}
+                onChange={(e) => setRequirePasswordChange(e.target.checked)}
+              />
+              <span className="text-sm leading-snug">
+                Minta user memasukan password baru saat login di cloud.amscorp.id
+              </span>
+            </label>
+            <Button
+              className="w-full"
+              disabled={
+                resetMut.isPending ||
+                !resetPassword ||
+                resetPassword !== resetConfirm
+              }
+              onClick={() => {
+                if (resetPassword !== resetConfirm) {
+                  toast.error('Konfirmasi password tidak cocok');
+                  return;
+                }
+                resetMut.mutate();
+              }}
+            >
+              {resetMut.isPending ? 'Menyimpan…' : 'Reset Password'}
             </Button>
           </div>
         </DialogContent>

@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { Formik, Form, Field } from 'formik';
 import * as Yup from 'yup';
 import { HardDrive } from 'lucide-react';
@@ -61,6 +62,14 @@ function LoginForm() {
                 {touched.password && errors.password && (
                   <p className="text-xs text-destructive">{errors.password}</p>
                 )}
+              </div>
+              <div className="flex justify-end">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  Lupa password?
+                </Link>
               </div>
               <Button type="submit" className="w-full" disabled={login.isPending}>
                 {login.isPending ? 'Signing in…' : 'Sign in'}

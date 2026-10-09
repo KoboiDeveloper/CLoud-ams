@@ -81,6 +81,13 @@ const AdminService = {
     });
     return data.data;
   },
+  resetPassword: async (
+    nik: string,
+    payload: { password: string; requirePasswordChange?: boolean },
+  ) => {
+    const { data } = await axiosInstance.patch(`/api/cloud/users/${nik}/reset-password`, payload);
+    return data.data;
+  },
 };
 
 export default AdminService;

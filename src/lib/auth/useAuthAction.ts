@@ -28,14 +28,36 @@ export function useAuthActions() {
     mutationFn: async (payload: LoginPayload & { callbackUrl?: string }) => {
       const res = await AuthService.login({ nik: payload.nik, password: payload.password });
       if (res.statusCode !== 200) throw new Error(res.message || 'Login failed');
-      return payload.callbackUrl || '/drive';
+      return {
+        callbackUrl: payload.callbackUrl || '/drive',
+        mustChangePassword: !!res.data?.mustChangePassword,
+      };
     },
-    onSuccess: async (url) => {
+    onSuccess: async ({ callbackUrl, mustChangePassword }) => {
       await qc.invalidateQueries({ queryKey: ['user-info'] });
+      if (mustChangePassword) {
+        toast.message('Silakan buat password baru sebelum melanjutkan');
+        router.push('/change-password');
+        return;
+      }
       toast.success('Login berhasil');
-      router.push(url);
+      router.push(callbackUrl);
     },
     onError: (err: Error) => toast.error(err.message || 'Login gagal'),
+  });
+
+  const changePassword = useMutation({
+    mutationFn: async (payload: { newPassword: string; currentPassword?: string }) => {
+      const res = await AuthService.changePassword(payload);
+      if (res.statusCode !== 200) throw new Error(res.message || 'Gagal mengubah password');
+      return res;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['user-info'] });
+      toast.success('Password berhasil diubah');
+      router.push('/drive');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Gagal mengubah password'),
   });
 
   const logout = useMutation({
@@ -47,5 +69,5 @@ export function useAuthActions() {
     },
   });
 
-  return { userInfo, login, logout };
+  return { userInfo, login, logout, changePassword };
 }

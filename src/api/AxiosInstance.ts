@@ -33,7 +33,8 @@ axiosInstance.interceptors.response.use(
     const isAuthEndpoint =
       url.includes('/api/cloud/auth/login') ||
       url.includes('/api/cloud/auth/refresh') ||
-      url.includes('/api/cloud/auth/forgot-password');
+      url.includes('/api/cloud/auth/forgot-password') ||
+      url.includes('/api/cloud/auth/reset-password');
 
     if (!originalRequest || status !== 401 || isAuthEndpoint) {
       return Promise.reject(error);
