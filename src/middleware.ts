@@ -18,11 +18,26 @@ function isTokenExpired(token?: string): boolean {
   return payload.exp * 1000 < Date.now() + 5000;
 }
 
+/** Strip leftover Task Manager / pre-isolation cookies so they cannot fake a Cloud session. */
+function clearLegacyAuthCookies(res: NextResponse) {
+  const expired = {
+    path: '/',
+    maxAge: 0,
+    httpOnly: true,
+    sameSite: 'lax' as const,
+  };
+  res.cookies.set('access_token', '', expired);
+  res.cookies.set('refresh_token', '', expired);
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const access = req.cookies.get('access_token')?.value;
-  const refresh = req.cookies.get('refresh_token')?.value;
+  // Cloud-only — never treat Task Manager access_token / refresh_token as Cloud session
+  const access = req.cookies.get('cloud_access_token')?.value;
+  const refresh = req.cookies.get('cloud_refresh_token')?.value;
   const hasSession = (!!access && !isTokenExpired(access)) || (!!refresh && !isTokenExpired(refresh));
+  const hasLegacyCookies =
+    !!req.cookies.get('access_token')?.value || !!req.cookies.get('refresh_token')?.value;
 
   const isPublic =
     pathname.startsWith('/login') ||
@@ -44,19 +59,32 @@ export function middleware(req: NextRequest) {
     }
     const url = req.nextUrl.clone();
     url.pathname = '/login';
-    return NextResponse.redirect(url);
+    url.search = '';
+    const res = NextResponse.redirect(url);
+    if (hasLegacyCookies) clearLegacyAuthCookies(res);
+    return res;
   }
 
   if (pathname === '/login' && hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = '/drive';
+    url.search = ''; // do not carry ?msg= onto /drive (was causing the stuck URL)
     return NextResponse.redirect(url);
   }
 
   if (pathname === '/') {
     const url = req.nextUrl.clone();
     url.pathname = hasSession ? '/drive' : '/login';
-    return NextResponse.redirect(url);
+    url.search = '';
+    const res = NextResponse.redirect(url);
+    if (!hasSession && hasLegacyCookies) clearLegacyAuthCookies(res);
+    return res;
+  }
+
+  if (hasLegacyCookies) {
+    const res = NextResponse.next();
+    clearLegacyAuthCookies(res);
+    return res;
   }
 
   return NextResponse.next();

@@ -40,7 +40,7 @@ axiosInstance.interceptors.response.use(
     }
 
     if (url.includes('/api/cloud/auth/refresh') || originalRequest._retry) {
-      handleSessionExpired('Sesi Anda telah kedaluwarsa. Silakan login kembali.');
+      void handleSessionExpired('Sesi Anda telah kedaluwarsa. Silakan login kembali.');
       return Promise.reject(error);
     }
 
@@ -61,7 +61,7 @@ axiosInstance.interceptors.response.use(
       return axiosInstance(originalRequest);
     } catch (refreshErr) {
       processQueue(refreshErr);
-      handleSessionExpired('Sesi Anda telah kedaluwarsa. Silakan login kembali.');
+      void handleSessionExpired('Sesi Anda telah kedaluwarsa. Silakan login kembali.');
       return Promise.reject(refreshErr);
     } finally {
       isRefreshing = false;

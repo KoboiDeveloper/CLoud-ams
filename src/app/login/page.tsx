@@ -1,8 +1,10 @@
 'use client';
 
+import { Suspense } from 'react';
 import { Formik, Form, Field } from 'formik';
 import * as Yup from 'yup';
 import { HardDrive } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +16,10 @@ const schema = Yup.object({
   password: Yup.string().required('Required'),
 });
 
-export default function LoginPage() {
+function LoginForm() {
   const { login } = useAuthActions();
+  const searchParams = useSearchParams();
+  const msg = searchParams.get('msg');
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--accent)_0%,_var(--background)_55%)] p-4">
@@ -30,6 +34,12 @@ export default function LoginPage() {
           <h1 className="text-2xl font-semibold">Cloud Storage</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in with your NIK</p>
         </div>
+
+        {msg && (
+          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {msg}
+          </div>
+        )}
 
         <Formik
           initialValues={{ nik: '', password: '' }}
@@ -60,5 +70,13 @@ export default function LoginPage() {
         </Formik>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading…</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
