@@ -1,6 +1,64 @@
+import axios from 'axios';
 import axiosInstance from '@/api/AxiosInstance';
+import AuthService from '@/lib/auth/authService';
 import { CommonResponse } from '@/lib/auth/authTypes';
 import { DriveItemType, DriveList } from '@/lib/drive/driveTypes';
+
+/** Samakan dengan mailbox: upload langsung ke BE (hindari rewrite Vercel → 413). */
+const DEFAULT_PROD_API = 'https://project-management-mje5.onrender.com';
+
+function isFrontendHost(hostname: string): boolean {
+  return (
+    hostname === 'cloud.amscorp.id' ||
+    hostname === 'workspace.amscorp.id' ||
+    hostname.endsWith('.vercel.app')
+  );
+}
+
+function resolveApiOrigin(): string {
+  const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+
+  // Jangan pernah pakai host FE sebagai target upload (rewrite Vercel → 413).
+  if (envUrl) {
+    try {
+      const host = new URL(envUrl).hostname;
+      if (!isFrontendHost(host)) return envUrl;
+    } catch {
+      /* fall through */
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1') {
+      return 'http://localhost:1000';
+    }
+    if (process.env.NODE_ENV === 'development' && !isFrontendHost(host)) {
+      return `http://${host}:1000`;
+    }
+  }
+
+  return DEFAULT_PROD_API;
+}
+
+function driveUploadUrl(): string {
+  return `${resolveApiOrigin()}/api/cloud/drive/upload`;
+}
+
+function isCrossOriginUpload(url: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URL(url, window.location.href).origin !== window.location.origin;
+  } catch {
+    return true;
+  }
+}
+
+async function fetchUploadBearer(): Promise<string | undefined> {
+  const res = await AuthService.getUploadTicket();
+  const token = res?.data?.token;
+  return typeof token === 'string' && token.trim() ? token.trim() : undefined;
+}
 
 const DriveService = {
   list: async (folderId?: string | null): Promise<DriveList> => {
@@ -53,19 +111,42 @@ const DriveService = {
   ) => {
     const form = new FormData();
     form.append('file', file);
-    const { data } = await axiosInstance.post('/api/cloud/drive/upload', form, {
-      params: folderId ? { folderId } : undefined,
-      headers: { 'Content-Type': 'multipart/form-data' },
-      signal,
-      onUploadProgress: (e) => {
-        if (!onProgress) return;
-        const total = e.total || file.size || 0;
-        const loaded = e.loaded || 0;
-        const pct = total ? Math.round((loaded / total) * 100) : 0;
-        onProgress(pct, loaded, total);
-      },
-    });
-    return data.data;
+    const url = driveUploadUrl();
+    const headers: Record<string, string> = {};
+
+    // Cross-origin (prod FE → Render BE): cookie httpOnly tidak ikut → Bearer singkat
+    if (isCrossOriginUpload(url)) {
+      const bearer = await fetchUploadBearer();
+      if (!bearer) {
+        throw new Error('Gagal mendapat tiket upload. Silakan login ulang.');
+      }
+      headers.Authorization = `Bearer ${bearer}`;
+    }
+
+    try {
+      const { data } = await axios.post(url, form, {
+        params: folderId ? { folderId } : undefined,
+        timeout: 15 * 60_000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        withCredentials: !headers.Authorization,
+        signal,
+        headers,
+        onUploadProgress: (e) => {
+          if (!onProgress) return;
+          const total = e.total || file.size || 0;
+          const loaded = e.loaded || 0;
+          const pct = total ? Math.round((loaded / total) * 100) : 0;
+          onProgress(pct, loaded, total);
+        },
+      });
+      return data.data;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 413) {
+        throw new Error('File terlalu besar untuk proxy/server. Coba lagi setelah deploy BE terbaru.');
+      }
+      throw err;
+    }
   },
   download: async (id: string) => {
     const { data } = await axiosInstance.get(`/api/cloud/drive/download/${id}`);
@@ -84,15 +165,21 @@ const DriveService = {
     return { blob: blob.type ? blob : new Blob([blob], { type: mime }), mimeType: mime };
   },
   rename: async (itemType: DriveItemType, id: string, name: string) => {
-    const { data } = await axiosInstance.patch(`/api/cloud/drive/${itemType}/${id}/rename`, { name });
+    const { data } = await axiosInstance.patch(`/api/cloud/drive/${itemType}/${id}/rename`, {
+      name,
+    });
     return data.data;
   },
   move: async (itemType: DriveItemType, id: string, folderId?: string | null) => {
-    const { data } = await axiosInstance.patch(`/api/cloud/drive/${itemType}/${id}/move`, { folderId });
+    const { data } = await axiosInstance.patch(`/api/cloud/drive/${itemType}/${id}/move`, {
+      folderId,
+    });
     return data.data;
   },
   star: async (itemType: DriveItemType, id: string, starred: boolean) => {
-    const { data } = await axiosInstance.patch(`/api/cloud/drive/${itemType}/${id}/star`, { starred });
+    const { data } = await axiosInstance.patch(`/api/cloud/drive/${itemType}/${id}/star`, {
+      starred,
+    });
     return data.data;
   },
   description: async (itemType: DriveItemType, id: string, description?: string) => {

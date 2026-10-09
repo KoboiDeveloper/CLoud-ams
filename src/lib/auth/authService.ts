@@ -59,6 +59,11 @@ const AuthService = {
     const { data } = await axiosInstance.post(`${baseURL}/reset-password`, payload);
     return data;
   },
+  /** Short-lived Bearer for direct BE upload (bypass Vercel/proxy 413). */
+  getUploadTicket: async (): Promise<CommonResponse<{ token: string; expiresIn: number }>> => {
+    const { data } = await axiosInstance.get(`${baseURL}/upload-ticket`);
+    return data;
+  },
 };
 
 export default AuthService;
