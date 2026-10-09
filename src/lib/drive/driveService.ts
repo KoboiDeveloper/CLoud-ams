@@ -45,15 +45,24 @@ const DriveService = {
     const { data } = await axiosInstance.post('/api/cloud/drive/folders', { name, parentId });
     return data.data;
   },
-  upload: async (file: File, folderId?: string | null, onProgress?: (pct: number) => void) => {
+  upload: async (
+    file: File,
+    folderId?: string | null,
+    onProgress?: (pct: number, loaded: number, total: number) => void,
+    signal?: AbortSignal,
+  ) => {
     const form = new FormData();
     form.append('file', file);
     const { data } = await axiosInstance.post('/api/cloud/drive/upload', form, {
       params: folderId ? { folderId } : undefined,
       headers: { 'Content-Type': 'multipart/form-data' },
+      signal,
       onUploadProgress: (e) => {
-        if (!onProgress || !e.total) return;
-        onProgress(Math.round((e.loaded / e.total) * 100));
+        if (!onProgress) return;
+        const total = e.total || file.size || 0;
+        const loaded = e.loaded || 0;
+        const pct = total ? Math.round((loaded / total) * 100) : 0;
+        onProgress(pct, loaded, total);
       },
     });
     return data.data;

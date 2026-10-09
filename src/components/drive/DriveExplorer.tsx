@@ -33,6 +33,7 @@ import { QuickViewFullscreen, QuickViewPanel } from '@/components/drive/QuickVie
 import { NewFolderDialog, FolderAccess } from '@/components/drive/NewFolderDialog';
 import { ShareFolderDialog } from '@/components/drive/ShareFolderDialog';
 import { EmptyFolderState } from '@/components/drive/EmptyFolderState';
+import { UploadDock } from '@/components/drive/UploadDock';
 import { DarkModeToggle } from '@/components/shared/DarkModeToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { cn, formatBytes } from '@/lib/utils';
 import { useAuthActions } from '@/lib/auth/useAuthAction';
+import { useUploadQueueStore } from '@/lib/drive/uploadQueueStore';
 import { format } from 'date-fns';
 
 type ViewMode = 'my' | 'shared' | 'recent' | 'starred' | 'trash';
@@ -181,14 +183,25 @@ export function DriveExplorer({ mode }: { mode: ViewMode }) {
     onError: (e: any) => toast.error(e?.response?.data?.message || e.message),
   });
 
-  const uploadMut = useMutation({
-    mutationFn: (file: File) => DriveService.upload(file, folderId),
-    onSuccess: () => {
-      toast.success('Upload complete');
-      invalidate();
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || e.message || 'Upload failed'),
-  });
+  const enqueueUploads = useUploadQueueStore((s) => s.enqueue);
+
+  const uploadDestLabel = useMemo(() => {
+    const crumbs = crumbsQuery.data || [];
+    if (crumbs.length) return crumbs[crumbs.length - 1]?.name || 'Files';
+    return 'Files';
+  }, [crumbsQuery.data]);
+
+  const startUploads = (fileList: FileList | File[] | null | undefined) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    enqueueUploads(files, {
+      folderId,
+      destLabel: uploadDestLabel,
+      upload: (file, destFolderId, onProgress, signal) =>
+        DriveService.upload(file, destFolderId, onProgress, signal),
+      onItemDone: () => invalidate(),
+    });
+  };
 
   const renameMut = useMutation({
     mutationFn: () => {
@@ -407,12 +420,6 @@ export function DriveExplorer({ mode }: { mode: ViewMode }) {
                 availableTypes={availableTypes}
                 availableExtensions={availableExtensions}
               />
-            )}
-
-            {uploadMut.isPending && (
-              <div className="mb-3 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                Uploading…
-              </div>
             )}
 
             {listQuery.isLoading ? (
@@ -703,13 +710,15 @@ export function DriveExplorer({ mode }: { mode: ViewMode }) {
       <input
         ref={fileInputRef}
         type="file"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) uploadMut.mutate(file);
+          startUploads(e.target.files);
           e.target.value = '';
         }}
       />
+
+      <UploadDock onAddFiles={() => fileInputRef.current?.click()} />
 
       {menu && (
         <div
