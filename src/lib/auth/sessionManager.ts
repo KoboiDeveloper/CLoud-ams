@@ -27,13 +27,13 @@ export async function handleSessionExpired(message?: string) {
   // Clear httpOnly cloud_* cookies so middleware won't bounce login → /drive again
   await revokeCloudCookies();
 
+  // Redirect to clean /login — no session-expired banner
+  void message;
   const url = new URL('/login', window.location.origin);
-  if (message) url.searchParams.set('msg', message);
 
   if (!window.location.pathname.startsWith('/login')) {
     window.location.href = url.toString();
   } else {
-    // Already on login: refresh URL with message, reset guard shortly
     window.history.replaceState({}, '', url.toString());
     handlingExpiry = false;
   }

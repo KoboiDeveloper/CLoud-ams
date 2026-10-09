@@ -46,6 +46,10 @@ const AuthService = {
     });
     return data;
   },
+  verifyOtp: async (otp: string): Promise<CommonResponse<{ nik: string; valid: boolean }>> => {
+    const { data } = await axiosInstance.post(`${baseURL}/verify-otp`, { otp });
+    return data;
+  },
   resetPassword: async (payload: {
     otp: string;
     newPassword: string;

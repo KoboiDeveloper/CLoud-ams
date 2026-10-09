@@ -34,6 +34,7 @@ axiosInstance.interceptors.response.use(
       url.includes('/api/cloud/auth/login') ||
       url.includes('/api/cloud/auth/refresh') ||
       url.includes('/api/cloud/auth/forgot-password') ||
+      url.includes('/api/cloud/auth/verify-otp') ||
       url.includes('/api/cloud/auth/reset-password') ||
       url.includes('/api/cloud/auth/workspace-handoff');
 
