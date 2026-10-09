@@ -9,6 +9,13 @@ export type LoginResult = {
   mustChangePassword?: boolean;
 };
 
+export type ResetPasswordResult = {
+  message: string;
+  nik: string;
+  handoffToken?: string;
+  mustChangePassword?: boolean;
+};
+
 const AuthService = {
   login: async (user: LoginPayload): Promise<CommonResponse<LoginResult>> => {
     const { data } = await axiosInstance.post(`${baseURL}/login`, user);
@@ -29,17 +36,33 @@ const AuthService = {
     const { data } = await axiosInstance.patch(`${baseURL}/change-password`, payload);
     return data;
   },
-  forgotPassword: async (nik: string): Promise<CommonResponse<string>> => {
-    const { data } = await axiosInstance.post(`${baseURL}/forgot-password`, { nik });
+  forgotPassword: async (
+    nik: string,
+    from?: 'workspace',
+  ): Promise<CommonResponse<string>> => {
+    const { data } = await axiosInstance.post(`${baseURL}/forgot-password`, {
+      nik,
+      ...(from ? { from } : {}),
+    });
     return data;
   },
   resetPassword: async (payload: {
     otp: string;
     newPassword: string;
-  }): Promise<CommonResponse<string>> => {
+    issueHandoff?: boolean;
+    autoLogin?: boolean;
+  }): Promise<CommonResponse<ResetPasswordResult>> => {
     const { data } = await axiosInstance.post(`${baseURL}/reset-password`, payload);
     return data;
   },
 };
 
 export default AuthService;
+
+export function getWorkspaceReturnUrl(handoffToken: string): string {
+  const base = (
+    process.env.NEXT_PUBLIC_WORKSPACE_URL ||
+    'https://task-manager-fe-lyart.vercel.app'
+  ).replace(/\/$/, '');
+  return `${base}/dashboard/user-settings?cloudHandoff=${encodeURIComponent(handoffToken)}#connected-apps`;
+}

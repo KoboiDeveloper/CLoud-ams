@@ -34,7 +34,8 @@ axiosInstance.interceptors.response.use(
       url.includes('/api/cloud/auth/login') ||
       url.includes('/api/cloud/auth/refresh') ||
       url.includes('/api/cloud/auth/forgot-password') ||
-      url.includes('/api/cloud/auth/reset-password');
+      url.includes('/api/cloud/auth/reset-password') ||
+      url.includes('/api/cloud/auth/workspace-handoff');
 
     if (!originalRequest || status !== 401 || isAuthEndpoint) {
       return Promise.reject(error);

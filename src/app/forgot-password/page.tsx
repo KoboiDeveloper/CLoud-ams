@@ -20,7 +20,12 @@ const schema = Yup.object({
 function ForgotPasswordForm() {
   const searchParams = useSearchParams();
   const initialNik = searchParams.get('nik')?.slice(0, 8) || '';
+  const fromWorkspace = searchParams.get('from') === 'workspace';
   const [sent, setSent] = useState(false);
+
+  const resetHref = fromWorkspace
+    ? `/reset-password?from=workspace${initialNik ? `&nik=${encodeURIComponent(initialNik)}` : ''}`
+    : '/reset-password';
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--accent)_0%,_var(--background)_55%)] p-4">
@@ -36,6 +41,11 @@ function ForgotPasswordForm() {
           <p className="mt-1 text-sm text-muted-foreground">
             Masukkan NIK Cloud Storage. OTP akan dikirim ke email terdaftar.
           </p>
+          {fromWorkspace && (
+            <p className="mt-2 rounded-lg bg-sky-500/10 px-2 py-1 text-xs text-sky-700 dark:text-sky-300">
+              Dari Workspace — setelah reset Anda bisa kembali ke connector
+            </p>
+          )}
         </div>
 
         {sent ? (
@@ -44,7 +54,7 @@ function ForgotPasswordForm() {
               Jika NIK terdaftar dan memiliki email, OTP sudah dikirim. Cek inbox Anda.
             </p>
             <Button asChild className="w-full">
-              <Link href="/reset-password">Lanjut isi OTP</Link>
+              <Link href={resetHref}>Lanjut isi OTP</Link>
             </Button>
             <Button asChild variant="ghost" className="w-full">
               <Link href="/login">Kembali ke login</Link>
@@ -57,7 +67,10 @@ function ForgotPasswordForm() {
             enableReinitialize
             onSubmit={async (values, { setSubmitting }) => {
               try {
-                const res = await AuthService.forgotPassword(values.nik);
+                const res = await AuthService.forgotPassword(
+                  values.nik,
+                  fromWorkspace ? 'workspace' : undefined,
+                );
                 if (res.statusCode !== 200) throw new Error(res.message);
                 toast.success(res.message || 'OTP terkirim');
                 setSent(true);
@@ -69,7 +82,7 @@ function ForgotPasswordForm() {
               }
             }}
           >
-            {({ errors, touched, isSubmitting }) => (
+            {({ errors, touched, isSubmitting, values }) => (
               <Form className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="nik">NIK</Label>
@@ -80,6 +93,17 @@ function ForgotPasswordForm() {
                 </div>
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? 'Mengirim…' : 'Kirim OTP ke email'}
+                </Button>
+                <Button asChild type="button" variant="ghost" className="w-full">
+                  <Link
+                    href={
+                      fromWorkspace
+                        ? `/reset-password?from=workspace&nik=${encodeURIComponent(values.nik || '')}`
+                        : '/reset-password'
+                    }
+                  >
+                    Sudah punya OTP?
+                  </Link>
                 </Button>
                 <Button asChild type="button" variant="ghost" className="w-full">
                   <Link href="/login">Kembali ke login</Link>

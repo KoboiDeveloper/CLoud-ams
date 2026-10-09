@@ -56,7 +56,8 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/api/cloud/auth/login') ||
     pathname.startsWith('/api/cloud/auth/refresh') ||
     pathname.startsWith('/api/cloud/auth/forgot-password') ||
-    pathname.startsWith('/api/cloud/auth/reset-password');
+    pathname.startsWith('/api/cloud/auth/reset-password') ||
+    pathname.startsWith('/api/cloud/auth/workspace-handoff');
 
   if (isPublicAuthApi || pathname.startsWith('/api/cloud/share/public')) {
     return NextResponse.next();

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { Formik, Form, Field } from 'formik';
 import * as Yup from 'yup';
@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AuthService from '@/lib/auth/authService';
+import AuthService, { getWorkspaceReturnUrl } from '@/lib/auth/authService';
 import { DarkModeToggle } from '@/components/shared/DarkModeToggle';
 
 function decodeOtpFromLink(token: string | null): string {
@@ -38,10 +38,90 @@ const schema = Yup.object({
     .required('Required'),
 });
 
+type DoneState = {
+  nik: string;
+  newPassword: string;
+  handoffToken?: string;
+};
+
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const fromWorkspace = searchParams.get('from') === 'workspace';
   const otpFromLink = decodeOtpFromLink(searchParams.get('verifylink'));
+  const [done, setDone] = useState<DoneState | null>(null);
+  const [busy, setBusy] = useState<'workspace' | 'cloud' | null>(null);
+
+  const goWorkspace = () => {
+    if (!done?.handoffToken) {
+      toast.error('Token handoff tidak tersedia. Hubungkan manual di Workspace.');
+      return;
+    }
+    setBusy('workspace');
+    window.location.href = getWorkspaceReturnUrl(done.handoffToken);
+  };
+
+  const stayOnCloud = async () => {
+    if (!done) return;
+    setBusy('cloud');
+    try {
+      const res = await AuthService.login({
+        nik: done.nik,
+        password: done.newPassword,
+      });
+      if (res.statusCode !== 200) throw new Error(res.message);
+      toast.success('Login Cloud berhasil');
+      router.push('/drive');
+    } catch (err) {
+      const ax = err as { response?: { data?: { message?: string } }; message?: string };
+      toast.error(ax?.response?.data?.message || ax?.message || 'Gagal login ke Cloud');
+      router.push('/login');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (done && fromWorkspace) {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--accent)_0%,_var(--background)_55%)] p-4">
+        <div className="absolute right-4 top-4">
+          <DarkModeToggle />
+        </div>
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-card-foreground shadow-sm">
+          <div className="mb-6 flex flex-col items-center text-center">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <HardDrive className="h-6 w-6" />
+            </div>
+            <h1 className="text-2xl font-semibold">Password berhasil diubah</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Anda datang dari Workspace. Pilih langkah berikutnya:
+            </p>
+          </div>
+          <div className="space-y-3">
+            <Button
+              className="w-full"
+              disabled={busy !== null || !done.handoffToken}
+              onClick={goWorkspace}
+            >
+              {busy === 'workspace' ? 'Mengarahkan…' : 'Kembali ke Workspace & hubungkan'}
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={busy !== null}
+              onClick={() => void stayOnCloud()}
+            >
+              {busy === 'cloud' ? 'Masuk…' : 'Lanjut di Cloud Storage'}
+            </Button>
+            <p className="text-center text-[11px] text-muted-foreground">
+              Jika tetap di Cloud, connector Workspace belum terhubung sampai Anda hubungkan
+              manual.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--accent)_0%,_var(--background)_55%)] p-4">
@@ -70,9 +150,21 @@ function ResetPasswordForm() {
               const res = await AuthService.resetPassword({
                 otp: values.otp,
                 newPassword: values.newPassword,
+                issueHandoff: fromWorkspace,
+                autoLogin: false,
               });
               if (res.statusCode !== 200) throw new Error(res.message);
-              toast.success(res.message || 'Password berhasil diubah');
+              toast.success(res.data?.message || res.message || 'Password berhasil diubah');
+
+              if (fromWorkspace) {
+                setDone({
+                  nik: res.data.nik,
+                  newPassword: values.newPassword,
+                  handoffToken: res.data.handoffToken,
+                });
+                return;
+              }
+
               router.push('/login');
             } catch (err) {
               const ax = err as { response?: { data?: { message?: string } }; message?: string };
